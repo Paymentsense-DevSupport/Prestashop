@@ -30,6 +30,7 @@ V1.9 - File Modified: 17/08/2013 - By Adam Watkins - Opal Creations:
 V1.9.1 - File Modified: 28/08/2013 - By Adam Watkins - Opal Creations, see changelog provided to Paymentsense
 V1.9.2 - File Modified: 09/10/2013 - By Lewis Ayres-Stephens - Paymentsense - replaced ‘global $smarty' with the context : ‘$this->context->smarty’
 V2.0.0 - File Modified: 11/04/2014 - By Paul Moscrop - Opal Creations (Character encodings). Adam Watkins -> Updated base package pricing to 14.95
+V2.0.1 - File Modified: 29/03/2016 - By Ryan O'Donnell - Paymentsense - Missing ')'. Removed Regex check for MerchantID and Password, replaced with link to online checker.
 */
 
 if (!defined('_PS_VERSION_'))
@@ -41,7 +42,7 @@ class Paymentsense extends PaymentModule
 	{
 		$this->name = 'paymentsense';
 		$this->tab = 'payments_gateways';
-		$this->version = '1.6.0.6';
+		$this->version = '1.6.1.4';
 		$this->author = 'Paymentsense';
 		$this->module_key = '1e631b52ed3d1572df477b9ce182ccf9';
 
@@ -218,30 +219,9 @@ class Paymentsense extends PaymentModule
 
 		/*Display errors / confirmation*/
 		if (Tools::getValue('paymentsense_SUBMIT') != '')
-		{
-			if (preg_match('/merchant/', Tools::getValue('PAYMENTSENSE_GATEWAYID')) || !preg_match( '/^([a-zA-Z0-9]{5,6})([-])([0-9]{7})$/', Tools::getValue('PAYMENTSENSE_GATEWAYID')))
-			{
-				$errors .= '<li><b>'.$this->l('Invalid Gateway Merchant ID').'</b> - Your Gateway Merchant ID should contain 
-				<strong>the first 6 characters of the company name followed by a hyphen (-) and 7 numbers</strong>';
-			}
-			
-			if (!preg_match( '/^(?=(.*[\d]){3,})(?=.*[a-z])(?=.*[A-Z])[A-Za-z0-9]{10,}$/', Tools::getValue('PAYMENTSENSE_GATEWAYID'))
-			{
-				$errors .= '<li><b>'.$this->l('Invalid Gateway Password').'</b> - 
-				Your gateway password is too short, this should contain 10 characters including 3 numbers. 
-				This password does <strong>NOT</strong> contain a symbol';
-			}
-			
-			if ($errors)
-			{
-				$this->_html .= '<div style="width:700px; margin-right:40px; background-color:orange;" class="alert error"><ul>'.
-				$errors.'</ul></div>';
-			}
-			else
-			{
-				$this->_html .= '<div style="width:754px; margin-right:20px; background-color:#8bc954; color:black;" class="conf confirm"><strong>'.
-				$this->l('Changes have all been saved').'</strong></div>';
-			}
+		{			
+			$this->_html .= '<div style="width:754px; margin-right:20px; background-color:#8bc954; color:black;" class="conf confirm"><strong>'.
+			$this->l('Changes have all been saved').'</strong></div>';			
 		}
 
 		/*Display the form*/
@@ -252,7 +232,7 @@ class Paymentsense extends PaymentModule
 		$this->_html .= '</tr></table>
 		<fieldset style="height:360px; width:730px; margin-right:20px;">
 			<table width="700px" cellspacing="20" align="center">
-			<tr><td colspan="2" style="padding-bottom:10px; font-size:16px;">'.$this->l('Enter your gateway merchant details below and click save to begin taking payments.').'</td></tr>
+			<tr><td colspan="2" style="padding-bottom:10px; font-size:16px;">'.$this->l('Enter your gateway merchant details below and click save to begin taking payments.').' Please check your gateway details <a href="http://paymentgatewayuk.com/CheckDetails/" target="_blank"><strong>HERE</strong></a> first.</td></tr>
 			<tr><td align="right">
 				<strong>'.htmlentities($this->l('Gateway MerchantID: '), ENT_COMPAT | ENT_HTML401, 'UTF-8'). '&nbsp;</strong></td><td align="left"><input name="PAYMENTSENSE_GATEWAYID" type="text" value="'.htmlentities($this->getSetting('PAYMENTSENSE_GATEWAYID'), ENT_COMPAT | ENT_HTML401, 'UTF-8').'" /><br/>
 			</td></tr><tr><td align="right">
