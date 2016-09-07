@@ -1,7 +1,7 @@
 <?php
 /*
 * Prestashop Paymentsense Re-Directed Payment Module
-* Copyright (C) 2014 Paymentsense.
+* Copyright (C) 2016 Paymentsense.
 *
 * This program is free software: you can redistribute it and/or modify it under the terms
 * of the AFL Academic Free License as published by the Free Software Foundation, either
@@ -13,7 +13,7 @@
 * AFL Academic Free License along with this program. If not, see <http://opensource.org/licenses/AFL-3.0/>.
 *
 *  @author Paymentsense <devsupport@paymentsense.com>
-*  @copyright  2014 Paymentsense
+*  @copyright  2016 Paymentsense
 *  @license    http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
 *
 
@@ -232,7 +232,7 @@ class Paymentsense extends PaymentModule
 		$this->_html .= '</tr></table>
 		<fieldset style="height:360px; width:730px; margin-right:20px;">
 			<table width="700px" cellspacing="20" align="center">
-			<tr><td colspan="2" style="padding-bottom:10px; font-size:16px;">'.$this->l('Enter your gateway merchant details below and click save to begin taking payments.').' Please check your gateway details <a href="http://paymentgatewayuk.com/CheckDetails/" target="_blank"><strong>HERE</strong></a> first.</td></tr>
+			<tr><td colspan="2" style="padding-bottom:10px; font-size:16px;">'.$this->l('Enter your gateway merchant details below and click save to begin taking payments.').' Please check your gateway details <a href="https://www.psdevsupport.co.uk/CheckDetails" target="_blank"><strong>HERE</strong></a> first.</td></tr>
 			<tr><td align="right">
 				<strong>'.htmlentities($this->l('Gateway MerchantID: '), ENT_COMPAT | ENT_HTML401, 'UTF-8'). '&nbsp;</strong></td><td align="left"><input name="PAYMENTSENSE_GATEWAYID" type="text" value="'.htmlentities($this->getSetting('PAYMENTSENSE_GATEWAYID'), ENT_COMPAT | ENT_HTML401, 'UTF-8').'" /><br/>
 			</td></tr><tr><td align="right">

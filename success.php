@@ -20,7 +20,7 @@ This file is part of the Prestashop Paymentsense Re-Directed Payment Module
 See paymentsense.php for Licensing and support info.
 File Last Modified: 12/03/2013 - By Shaun Ponting - Opal Creations
 File Last Modified: 16/07/2013 - By Lewis Ayres-Stephens - Paymentsense - Failed Transaction Retry fixed
-File Modified: 09/10/2013 - By Lewis Ayres-Stephens - Paymentsense - replaced ‘global $smarty' with the context : ‘$this->context->smarty’
+File Modified: 09/10/2013 - By Lewis Ayres-Stephens - Paymentsense - replaced ï¿½global $smarty' with the context : ï¿½$this->context->smartyï¿½
 */
 
 include(dirname(__FILE__).'/../../config/config.inc.php');
