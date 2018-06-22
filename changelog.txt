@@ -1,0 +1,13 @@
+# Changelog
+Paymentsense Module for PrestaShop 1.6 and 1.7
+
+## [2.1.0] - 2018-06-22
+### Added
+- Support for PrestaShop 1.7
+- Configuration check before showing the payment method on the order checkout page
+
+### Changed
+- Payment option logo
+- Format of the TransactionDateTime parameter as per the payment gateway specifications v2.5.01 (current)
+- Country names for ISO 3166-1 code 408 (North Korea) and 410 (South Korea) as per PrestaShop v1.7.3.3 (current) definitions
+- Country names for ISO 3166-1 code 178 (Congo - Brazzaville) and 180 (Congo - Kinshasa) as per PrestaShop v1.7.3.3 (current) definitions
