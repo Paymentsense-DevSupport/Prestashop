@@ -1,7 +1,7 @@
 <?php
 /*
 * Prestashop Paymentsense Re-Directed Payment Module
-* Copyright (C) 2018 Paymentsense.
+* Copyright (C) 2020 Paymentsense.
 *
 * This program is free software: you can redistribute it and/or modify it under the terms
 * of the AFL Academic Free License as published by the Free Software Foundation, either
@@ -13,7 +13,7 @@
 * AFL Academic Free License along with this program. If not, see <http://opensource.org/licenses/AFL-3.0/>.
 *
 *  @author Paymentsense <devsupport@paymentsense.com>
-*  @copyright  2018 Paymentsense
+*  @copyright  2020 Paymentsense
 *  @license    http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
 *
 
@@ -33,15 +33,28 @@ V2.0.0 - File Modified: 11/04/2014 - By Paul Moscrop - Opal Creations (Character
 V2.0.1 - File Modified: 29/03/2016 - By Ryan O'Donnell - Paymentsense - Missing ')'. Removed Regex check for MerchantID and Password, replaced with link to online checker.
 V2.1.0 - File Modified: 22/06/2018 - By Alexander Kaltchev - Dev Advisory UK - Added support for PrestaShop 1.7
 V2.1.1 - File Modified: 26/07/2019 - By Alexander Kaltchev - Dev Advisory UK - Updated the conversion of the numeric country ISO 3166-1 codes
+V2.1.2 - File Modified: 17/01/2020 - By Alexander Kaltchev - Dev Advisory UK - Added module information reporting feature
+                                                                             - Changed module configuration settings page
 
 A complete list of changes can be found in the changelog file (changelog.txt).
 */
 
-if (!defined('_PS_VERSION_'))
+if (!defined('_PS_VERSION_')) {
     exit;
+}
 
 class Paymentsense extends PaymentModule
 {
+    /**
+     * Module name. Used in the module information reporting
+     */
+    const MODULE_NAME = 'Paymentsense Module for PrestaShop';
+
+    /**
+     * Module version
+     */
+    const MODULE_VERSION = '2.1.2';
+
     /**
      * Transaction Result Codes
      */
@@ -60,22 +73,30 @@ class Paymentsense extends PaymentModule
 
     public function __construct()
     {
-        $this->name = 'paymentsense';
-        $this->tab = 'payments_gateways';
-        $this->version = '2.1.1';
-        $this->author = 'Paymentsense';
+        $this->version    = self::MODULE_VERSION;
+        $this->name       = 'paymentsense';
+        $this->tab        = 'payments_gateways';
+        $this->author     = 'Paymentsense Ltd.';
         $this->module_key = '1e631b52ed3d1572df477b9ce182ccf9';
 
-        $this->currencies = true;
+        $this->currencies      = true;
         $this->currencies_mode = 'radio';
+
+        $this->bootstrap = true;
+
         parent::__construct();
 
-        $this->displayName = $this->l('Paymentsense');
+        $this->displayName = $this->l('Paymentsense Payments');
         $this->description = $this->l('Process transactions through the Paymentsense gateway.');
         
         $this->confirmUninstall = $this->l('Are you sure you want to uninstall?');
     }
 
+    /**
+     * Installer
+     *
+     * @return bool
+     */
     public function install()
     {
         return (parent::install() && Configuration::updateValue('PAYMENTSENSE_GATEWAYID', '')
@@ -88,6 +109,11 @@ class Paymentsense extends PaymentModule
                                   && $this->registerHook('paymentReturn'));
     }
 
+    /**
+     * Uninstaller
+     *
+     * @return bool
+     */
     public function uninstall()
     {
         return (Configuration::deleteByName('PAYMENTSENSE_GATEWAYID')
@@ -96,189 +122,6 @@ class Paymentsense extends PaymentModule
             && Configuration::deleteByName('PAYMENTSENSE_DEBUG')
             && Configuration::deleteByName('PAYMENTSENSE_TRANSACTION_TYPE')
             && parent::uninstall());
-    }
-
-    private function getSetting($name)
-    {
-        if (array_key_exists($name, $_POST))
-        {
-            return Tools::getValue($name);
-        }
-        elseif (Configuration::get($name))
-        {
-            return Configuration::get($name);
-        }
-    }
-
-    private function validateTrueFalseString($value)
-    {
-        if ($value == 'True' || $value == 'False')
-        {
-            return $value;
-        }
-    }
-
-    private function trueFalseOption($name, $label, $trueLabel = 'True', $falseLabel = 'False')
-    {
-        if ($this->getSetting($name) == 'True')
-        {
-            $trueSelected = ' selected';
-            $falseSelected = '';
-        }
-        else
-        {
-            $trueSelected = '';
-            $falseSelected = ' selected';
-        }
-
-        $html = '<strong>'.$this->l(Tools::safeOutput($label)).'&nbsp</strong></td><td><select name="'.Tools::safeOutput($name).'">
-        <option'.$trueSelected.' value="True">'.$this->l(Tools::safeOutput($trueLabel)).'</option>
-        <option'.$falseSelected.' value="False">'.$this->l(Tools::safeOutput($falseLabel)).'</option>
-        </select>';
-
-        return $html;
-    }
-
-    private function salePreauthOption($name, $label, $trueLabel = 'PREAUTH', $falseLabel = 'SALE')
-    {
-        if ($this->getSetting($name) == 'SALE')
-        {
-            $trueSelected = ' selected';
-            $falseSelected = '';
-        }
-        else
-        {
-            $trueSelected = '';
-            $falseSelected = ' selected';
-        }
-
-        $html = '<strong>'.$this->l(Tools::safeOutput($label)).'</strong></td>
-                <td>
-                    <select name="'.Tools::safeOutput($name).'">
-                        <option'.$trueSelected.' value="SALE">'.$this->l(Tools::safeOutput($trueLabel)).'</option>
-                        <option'.$falseSelected.' value="PREAUTH">'.$this->l(Tools::safeOutput($falseLabel)).'</option>
-                    </select>';
-
-        return $html;
-    }
-
-    public function getContent()
-    {
-        $this->_html .= '<table width="100%" cellspacing="30"><tr><td colspan="2" align="center">';
-        /*Validate + save their input*/
-        $errors = '';
-        if (Tools::getValue('paymentsense_SUBMIT') != '')
-        {
-            /*Prestashop's pSQL prevents XSS and SQL injection for us using the pSQL function :) */
-            if (Tools::getValue('PAYMENTSENSE_GATEWAYID') == '')
-            {
-                $errors .= '<li><b>'.$this->l('Gateway ID').'</b> - '.
-                $this->l('The Gateway ID field can\'t be left blank. Please check the correct value with Paymentsense if you\'re unsure.').'</li>';
-            }
-            else
-            {
-                Configuration::updateValue('PAYMENTSENSE_GATEWAYID', Tools::getValue('PAYMENTSENSE_GATEWAYID'));
-                Configuration::updateValue('PAYMENTSENSE_GATEWAYPASS', Tools::getValue('PAYMENTSENSE_GATEWAYPASS'));
-                Configuration::updateValue('PAYMENTSENSE_PSK', Tools::getValue('PAYMENTSENSE_PSK'));
-                Configuration::updateValue('PAYMENTSENSE_DEBUG', Tools::getValue('PAYMENTSENSE_DEBUG'));
-                Configuration::updateValue('PAYMENTSENSE_TRANSACTION_TYPE', Tools::getValue('PAYMENTSENSE_TRANSACTION_TYPE'));
-            }
-        }
-        else
-        {
-            $errors .= '<li>'.$this->l('Problem updating settings, invalid information. 
-            If this problem persists get in touch, devsupport@paymentsense.com').'</li>';
-        }
-        
-        $image_url = 'http://'.$_SERVER['HTTP_HOST'].__PS_BASE_URI__.'modules/'.$this->name.'/img/';
-        
-        
-        $this->_html .= '<table width="800px" cellspacing="10">
-        <tr>
-            <td valign="top"><img src="'.$image_url.'PaymentsenseLogo.jpg" width="181px" height="88px"></td>
-            <td></td>
-            <td></td>
-            <td colspan="2" height="70" valign="middle">
-                <img src="'.$image_url.'Tagline.png" width="221px" height="22px">
-            </td>
-        </tr>
-        <tr>
-            <td colspan="5" >
-                <table style="width:751px; border-bottom: 1px solid #969aa2;">
-                    <tr>
-                        <td height="1px"></td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-        <tr>
-            <td colspan="5" height="70px" style="font-size:16px; padding-top:10px;">
-                        '.$this->l('Thank you for choosing Paymentsense for your online payments,').'<br/><br />
-                '.$this->l('In order to process payments through your Paymentsense account please enter your gateway details below:').'<br/>
-            </td>
-        </tr>
-        <tr style="width:100%;">
-            <td colspan="2" style="width:30%;" align="center">
-                <img src="'.$image_url.'ecomPlaceholder.jpg" width="250px" height="181px"></br>
-            </td>
-            <td colspan="3" style="width:70%;">
-                <h2>Gateway Details</h2>
-                        <ul style="font-size:14px; ">
-                            <li><strong>Merchant ID Format:</strong> ABCDEF-1234567.</li>
-                        <li><strong>Password Format:</strong> Contains only Letters and Numbers NO Special Characters.</li>
-                        <li><strong>PreSharedKey:</strong> Found in the Merchant Management System under "Account Admin" > "Account Settings".</li>
-                        <li><strong>Debug Mode:</strong> only turn on for testing. Do NOT use for live accounts.</li>
-                        <li><strong>Transaction Type:</strong> PREAUTH - Only Authorises the transaction, SALE - Authorises and Collects the transaction.</li>
-                        <li>Please refer to our <a href="http://developers.paymentsense.co.uk/developers-resources/faq/" target="_blank"><strong>FAQ</strong></a> if you have any issues.</li>
-                        </ul>
-            </td>
-        </tr>
-    </table>
-     <br />';
-
-
-
-        /*Display errors / confirmation*/
-        if (Tools::getValue('paymentsense_SUBMIT') != '')
-        {            
-            $this->_html .= '<div style="width:754px; margin-right:20px; background-color:#8bc954; color:black;" class="conf confirm"><strong>'.
-            $this->l('Changes have all been saved').'</strong></div>';
-        }
-
-        /*Display the form*/
-        $this->_html .= '<form action="'.htmlentities($_SERVER['REQUEST_URI'], ENT_COMPAT, 'UTF-8').'" method="post">
-        <table width="945px"><tr><td width="247px" align="right">';
-
-        /*Display options*/
-        $this->_html .= '</tr></table>
-        <fieldset style="height:360px; width:730px; margin-right:20px;">
-            <table width="700px" cellspacing="20" align="center">
-            <tr><td colspan="2" style="padding-bottom:10px; font-size:16px;">'.$this->l('Enter your gateway merchant details below and click save to begin taking payments.').' Please check your gateway details <a href="https://www.psdevsupport.co.uk/CheckDetails" target="_blank"><strong>HERE</strong></a> first.</td></tr>
-            <tr><td align="right">
-                <strong>'.htmlentities($this->l('Gateway MerchantID: '), ENT_COMPAT | ENT_HTML401, 'UTF-8'). '&nbsp;</strong></td><td align="left"><input name="PAYMENTSENSE_GATEWAYID" type="text" value="'.htmlentities($this->getSetting('PAYMENTSENSE_GATEWAYID'), ENT_COMPAT | ENT_HTML401, 'UTF-8').'" /><br/>
-            </td></tr><tr><td align="right">
-                <strong>'.htmlentities($this->l('Gateway Password: '), ENT_COMPAT | ENT_HTML401, 'UTF-8').'&nbsp</strong></td><td align="left"><input name="PAYMENTSENSE_GATEWAYPASS" type="text" value="'.htmlentities($this->getSetting('PAYMENTSENSE_GATEWAYPASS'), ENT_COMPAT | ENT_HTML401, 'UTF-8').'" />
-            </td></tr><tr><td width="50%" align="right">
-                <strong>'.htmlentities($this->l('Pre-Shared Key: '), ENT_COMPAT | ENT_HTML401, 'UTF-8').'&nbsp</strong></td><td align="left"><input type="text" name="PAYMENTSENSE_PSK" value="'.htmlentities($this->getSetting('PAYMENTSENSE_PSK'), ENT_COMPAT | ENT_HTML401, 'UTF-8').'"/>
-            </td></tr><tr><td colspan="" align="right">'.
-                $this->trueFalseOption('PAYMENTSENSE_DEBUG', 'Debug Mode: ', 'On', 'Off').
-            '</td></tr><tr><td colspan=""  align="right">'.
-            $this->trueFalseOption('PAYMENTSENSE_TRANSACTION_TYPE', 'Transaction Type: ', 'PREAUTH', 'SALE').
-            '</td></tr><tr><td colspan="2" align="center" style="padding-top:20px;">
-            <input style="background: url('.$image_url.'BlueButtonBackground.png) no-repeat; border: none; cursor:pointer;
-            cursor:hand; width:170px; height:38px; color:white; font-weight:bold;" type="submit" name="paymentsense_SUBMIT" id="paymentsense_SUBMIT" value="'.$this->l('Save your changes').'" /></form>
-            </td></tr></table></fieldset>';
-
-        $this->_html .= '</td></tr><tr><td colspan="2" align="center">
-        <table width="900px">
-        <tr>
-        <td align="center">
-        '.str_replace("copy;",utf8_encode('&copy;'), $this->l('Copyright copy; 2014 Paymentsense Ltd. All rights reserved. Paymentsense, acting as an agent of First Data Europe Limited, trading as First Data Merchant Solutions, is registered with MasterCard / Visa as an Independent Sales Organisation and Member Service Provider.') )
-        .'</td>
-        </tr></table>';
-
-        $this->_html .= '</td></tr></table>';
-        return $this->_html;
     }
 
     /**
@@ -300,7 +143,7 @@ class Paymentsense extends PaymentModule
         }
 
         $this->context->smarty->assign($this->buildHostedFormData($params));
-        return $this->display(__FILE__, '/views/templates/front/paymentsense.tpl');
+        return $this->display(__FILE__, 'views/templates/front/paymentsense.tpl');
     }
 
     /**
@@ -347,6 +190,263 @@ class Paymentsense extends PaymentModule
     }
 
     /**
+     * Gets module name
+     *
+     * @return string
+     */
+    public function getModuleInternalName()
+    {
+        return self::MODULE_NAME;
+    }
+
+    /**
+     * Gets module installed version
+     *
+     * @return string
+     */
+    public function getModuleInstalledVersion()
+    {
+        return Paymentsense::MODULE_VERSION;
+    }
+
+
+    /**
+     * Checks whether the payment method is configured
+     *
+     * @return bool True if gateway merchant ID, password and pre-shared key are non-empty, otherwise false
+     */
+    public function isConfigured()
+    {
+        return ((trim(Configuration::get('PAYMENTSENSE_GATEWAYID')) != '') &&
+            (trim(Configuration::get('PAYMENTSENSE_GATEWAYPASS')) != '') &&
+            (trim(Configuration::get('PAYMENTSENSE_PSK')) != ''));
+    }
+
+    /**
+     * Determines whether the order is paid
+     *
+     * @param OrderCore $order
+     *
+     * @return bool
+     */
+    public function isOrderPaid($order)
+    {
+        $result = false;
+        $paidStatuses = array(
+            Configuration::get('PS_OS_WS_PAYMENT'),
+            Configuration::get('PS_OS_PAYMENT'),
+            Configuration::get('PS_OS_OUTOFSTOCK_PAID')
+        );
+        if (Validate::isLoadedObject($order)) {
+            $result = in_array($order->getCurrentState(), $paidStatuses);
+        }
+        return $result;
+    }
+
+    /**
+     * Checks whether the hash digest received from the payment gateway is valid
+     *
+     * @param string $requestType Type of the request (notification or customer redirect)
+     *
+     * @return bool
+     */
+    public function isHashDigestValid($requestType)
+    {
+        $result = false;
+        $data   = $this->buildPostString($requestType);
+        if ($data) {
+            $hashDigestReceived   = Tools::getValue('HashDigest');
+            $hashDigestCalculated = $this->calculateHashDigest(
+                $data,
+                'SHA1', // Hardcoded as per the current plugin implementation
+                Configuration::get('PAYMENTSENSE_PSK')
+            );
+            $result = strToUpper($hashDigestReceived) === strToUpper($hashDigestCalculated);
+        }
+        return $result;
+    }
+
+    /**
+     * Retrieves the Cart ID from the OrderID POST variable received by the payment gateway
+     *
+     * @return int|false
+     */
+    public function retrieveCartID()
+    {
+        $result  = false;
+        $orderId = Tools::getValue('OrderID');
+        $cartId  = Tools::substr($orderId, strpos($orderId, '~') + 1);
+        if (is_string($cartId) && ($cartId != '')) {
+            $result = (int) $cartId;
+        }
+        return $result;
+    }
+
+    /**
+     * Creates the order
+     *
+     * @param object $cart
+     * @param string $orderState
+     * @param string $message
+     * @param float $amount
+     *
+     * @return bool
+     *
+     * @throws Exception
+     */
+    public function createOrder($cart, $orderState, $message, $amount)
+    {
+        $customer = new Customer((int)$cart->id_customer);
+        return $this->validateOrder(
+            $cart->id,
+            $orderState,
+            $amount,
+            $this->displayName,
+            $message,
+            array(),
+            null,
+            true,
+            $customer->secure_key
+        );
+    }
+
+    /**
+     * Gets the content of the configuration settings page
+     *
+     * @return string Rendered template output
+     */
+    public function getContent()
+    {
+        $params = array(
+            'notice_type'           => '',
+            'notice_text'           => '',
+            'form_action'           => $_SERVER['REQUEST_URI'],
+            'form_var_gateway_id'   => $this->getSetting('PAYMENTSENSE_GATEWAYID'),
+            'form_var_gateway_pass' => $this->getSetting('PAYMENTSENSE_GATEWAYPASS'),
+            'form_var_gateway_psk'  => $this->getSetting('PAYMENTSENSE_PSK'),
+            'form_var_trx_type'     => $this->getSetting('PAYMENTSENSE_TRANSACTION_TYPE'),
+            'form_var_debug'        => $this->getSetting('PAYMENTSENSE_DEBUG')
+        );
+        if (Tools::isSubmit('btnSubmit')) {
+            if ($this->updateConfigSettings()) {
+                $params['notice_type'] = 'success';
+                $params['notice_text'] = 'Settings updated';
+            } else {
+                $params['notice_type'] = 'danger';
+                $params['notice_text'] = 'Settings update error';
+            }
+        }
+        $this->context->smarty->assign($params);
+        return $this->display(__FILE__, 'views/templates/admin/form.tpl');
+    }
+
+    /**
+     * Gets order state based on transaction status code
+     *
+     * @param string $statusCode Transaction status code
+     * @param string $prevStatusCode Previous transaction status code
+     *
+     * @return string
+     */
+    public function getOrderState($statusCode, $prevStatusCode)
+    {
+        switch ($statusCode) {
+            case self::TRX_RESULT_SUCCESS:
+                $orderState = Configuration::get('PS_OS_WS_PAYMENT');
+                break;
+            case self::TRX_RESULT_DUPLICATE:
+                if ($prevStatusCode === self::TRX_RESULT_SUCCESS) {
+                    $orderState = Configuration::get('PS_OS_WS_PAYMENT');
+                } else {
+                    $orderState = Configuration::get('PS_OS_ERROR');
+                }
+                break;
+            default:
+                $orderState = Configuration::get('PS_OS_ERROR');
+        }
+        return $orderState;
+    }
+
+    /**
+     * Performs a cURL request
+     *
+     * @param array $data cURL data.
+     * @param mixed $response the result or false on failure.
+     *
+     * @return int the error number or 0 if no error occurred
+     */
+    public function performCurl($data, &$response)
+    {
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_HEADER, false);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $data['headers']);
+        curl_setopt($ch, CURLOPT_URL, $data['url']);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_ENCODING, 'UTF-8');
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        if (!empty($data['data'])) {
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $data['data']);
+        } else {
+            curl_setopt($ch, CURLOPT_POST, false);
+        }
+        $response = curl_exec($ch);
+        $err_no   = curl_errno($ch);
+        curl_close($ch);
+        return $err_no;
+    }
+
+    /**
+     * Gets a setting from the HTTP POST variables or the configuration
+     *
+     * @param string $name Setting name
+     *
+     * @return string
+     */
+    protected function getSetting($name)
+    {
+        switch (true) {
+            case array_key_exists($name, $_POST):
+                $result = Tools::getValue($name);
+                break;
+            case Configuration::get($name) !== false:
+                $result = Configuration::get($name);
+                break;
+            default:
+                $result = '';
+                break;
+        }
+        return $result;
+    }
+
+    /**
+     * Updates the configuration settings
+     *
+     * @return bool
+     */
+    protected function updateConfigSettings()
+    {
+        $result   = true;
+        $settings = array(
+            'PAYMENTSENSE_GATEWAYID',
+            'PAYMENTSENSE_GATEWAYPASS',
+            'PAYMENTSENSE_PSK',
+            'PAYMENTSENSE_TRANSACTION_TYPE',
+            'PAYMENTSENSE_DEBUG'
+        );
+        foreach ($settings as $setting) {
+            $value = Tools::getValue($setting);
+            if ($value != '') {
+                Configuration::updateValue($setting, $value);
+            } else {
+                $result = false;
+                break;
+            }
+        }
+        return $result;
+    }
+
+    /**
      * Builds the data for the form redirecting to the Hosted Payment Form
      *
      * Common for all PrestaShop versions
@@ -363,101 +463,35 @@ class Paymentsense extends PaymentModule
      *
      * @return array
      */
-    public function buildHostedFormData($params)
+    protected function buildHostedFormData($params)
     {
         $address = new Address((int)($params['cart']->id_address_invoice));
         $customer = new Customer((int)($params['cart']->id_customer));
-        $currency = $this->getCurrency();
 
-        $psquery = 'SELECT id_currency FROM '._DB_PREFIX_.'module_currency WHERE id_module = '.(int)$this->id;
-        $db = Db::getInstance();
-        $queryresult = $db->getRow($psquery);
-        $id1_currency = array_shift($queryresult);
+        $cart_currency = $this->getsCurrencyIdIsoCode((int)$params['cart']->id_currency);
 
-        /*get currency of current cart.*/
-        $psquery1 = 'SELECT iso_code FROM '._DB_PREFIX_.'currency WHERE id_currency = '.(int)$params['cart']->id_currency;
-        $queryresult1 = $db->getRow($psquery1);
-        $cart_currency = array_shift($queryresult1);
+        $orderTotal = number_format($params['cart']->getOrderTotal(true, Cart::BOTH), 2, '.', '');
+        $amount = $orderTotal * 100;
 
-        if (!$id1_currency || $id1_currency == -2)
-        {
-            $id2_currency = Configuration::get('PS_CURRENCY_DEFAULT');
-        }
-        elseif ($id1_currency == -1)
-        {
-            $id2_currency = $params['cart']->id_currency;
-        }
-
-        /*get currency of current cart.*/
-        $psquery2 = 'SELECT conversion_rate FROM '._DB_PREFIX_.'currency WHERE id_currency = '.(int)$params['cart']->id_currency;
-        $queryresult2 = $db->getRow($psquery2);
-        $cart_conversion_rate = array_shift($queryresult2);
-
-        /*Grab the order total and format it properly*/
-        if ($params['cart']->id_currency != $id2_currency)
-        {
-            $price = $params['cart']->getOrderTotal(true, 3);
-            $amount = number_format($price, 2, '.', '');
-            $currencyps = $cart_currency;
-        }
-        else
-        {
-            $amount = number_format($params['cart']->getOrderTotal(true, 3), 2, '.', '');
-            $currencyps = $cart_currency;
-        }
-
-        $amount = sprintf('%0.2f', $amount);
-        $amount = preg_replace('/[^\d]+/', '', $amount);
-
-        $orderTotal = $params['cart']->getOrderTotal(true, 3);
-
-        $parameters = array();
-
-        $paymentsense_psk = $this->getSetting('PAYMENTSENSE_PSK');
-        $paymentsense_gatewaypass = $this->getSetting('PAYMENTSENSE_GATEWAYPASS');
-
-        if ($this->getSetting('PAYMENTSENSE_TRANSACTION_TYPE') == 'False')
-        {
-            $paymentsense_transactiontype = 'SALE';
-        }
-        else
-        {
-            $paymentsense_transactiontype = 'PREAUTH';
-        }
+        $paymentsense_merchantid      = Configuration::get('PAYMENTSENSE_GATEWAYID');
+        $paymentsense_gatewaypass     = Configuration::get('PAYMENTSENSE_GATEWAYPASS');
+        $paymentsense_psk             = Configuration::get('PAYMENTSENSE_PSK');
+        $paymentsense_transactiontype = Configuration::get('PAYMENTSENSE_TRANSACTION_TYPE');
 
         $datestamp = date('Y-m-d H:i:s P');
         $gatewayorderID = date('Ymd-His').'~'.$params['cart']->id;
 
-        if ($address->phone != '')
-        {
+        if ($address->phone != '') {
             $PhoneNumber = $address->phone;
-        }
-        else
-        {
+        } else {
             $PhoneNumber = $address->phone_mobile;
         }
 
-        switch ($currency->iso_code)
-        {
-            case 'GBP':
-                $currencyISO = '826';
-                break;
-            case 'USD':
-                $currencyISO = '840';
-                break;
-            case 'EUR':
-                $currencyISO = '978';
-                break;
-            default:
-                $currencyISO = htmlentities($currency->iso_code);
-                break;
-        }
-
         $HashString = 'PreSharedKey='.$paymentsense_psk;
-        $HashString .= '&MerchantID='.$this->getSetting('PAYMENTSENSE_GATEWAYID');
+        $HashString .= '&MerchantID='.$paymentsense_merchantid;
         $HashString .= '&Password='.$paymentsense_gatewaypass;
         $HashString .= '&Amount='.$amount;
-        $HashString .= '&CurrencyCode='.$this->getCurrencyISO($currencyps);
+        $HashString .= '&CurrencyCode='.$this->getCurrencyIsoCode($cart_currency);
         $HashString .= '&EchoAVSCheckResult=True';
         $HashString .= '&EchoCV2CheckResult=True';
         $HashString .= '&EchoThreeDSecureAuthenticationCheckResult=True';
@@ -494,10 +528,11 @@ class Paymentsense extends PaymentModule
         $HashString .= '&ServerResultURLQueryStringVariables=';
         $HashDigest = sha1($HashString);
 
+        $parameters = array();
         $parameters['HashDigest'] = $HashDigest;
-        $parameters['MerchantID'] = $this->getSetting('PAYMENTSENSE_GATEWAYID');
+        $parameters['MerchantID'] = $paymentsense_merchantid;
         $parameters['Amount'] = $amount;
-        $parameters['CurrencyCode'] = $this->getCurrencyISO($currencyps);
+        $parameters['CurrencyCode'] = $this->getCurrencyIsoCode($cart_currency);
         $parameters['EchoAVSCheckResult'] = 'True';
         $parameters['EchoCV2CheckResult'] = 'True';
         $parameters['EchoThreeDSecureAuthenticationCheckResult'] = 'True';
@@ -532,108 +567,223 @@ class Paymentsense extends PaymentModule
         $parameters['ServerResultURLCookieVariables'] = '';
         $parameters['ServerResultURLFormVariables'] = 'orderTotal='.$orderTotal;
         $parameters['ServerResultURLQueryStringVariables'] = '';
-
         $parameters['ThreeDSecureCompatMode'] = 'false';
         $parameters['ServerResultCompatMode'] = 'false';
-
         $form_target = 'https://mms.paymentsensegateway.com/Pages/PublicPages/PaymentForm.aspx';
 
         return array('parameters' => $parameters, 'form_target' => $form_target);
     }
 
-    public function generateorderdate()
+    /**
+     * Gets the ISO 4217 code of a currency_id
+     *
+     * @param int $id_currency
+     *
+     * @return string
+     */
+    protected function getsCurrencyIdIsoCode($id_currency)
     {
-        $str = date('Ymd-His');
-        
-        return $str;
+        $db = Db::getInstance();
+        $query = 'SELECT `iso_code` FROM '._DB_PREFIX_.'currency WHERE `id_currency` = '.(int)$id_currency;
+        return $db->getValue($query);
     }
 
-    /* Helper functions */
-    public function parseBoolString($boolString)
+    /**
+     * Gets the numeric currency ISO 4217 code
+     *
+     * @param string $currencyCode Currency 4217 code.
+     * @param string $defaultCode Default currency code.
+     *
+     * @return string
+     */
+    protected static function getCurrencyIsoCode($currencyCode, $defaultCode = '826')
     {
-        if (!$boolString || (strcasecmp($boolString, 'false') == 0) || $boolString == '0')
-        {
-            return false;
+        $result   = $defaultCode;
+        $isoCodes = array(
+            'AED' => '784',
+            'AFN' => '971',
+            'ALL' => '8',
+            'AMD' => '51',
+            'ANG' => '532',
+            'AOA' => '973',
+            'ARS' => '32',
+            'AUD' => '36',
+            'AWG' => '533',
+            'AZN' => '944',
+            'BAM' => '977',
+            'BBD' => '52',
+            'BDT' => '50',
+            'BGN' => '975',
+            'BHD' => '48',
+            'BIF' => '108',
+            'BMD' => '60',
+            'BND' => '96',
+            'BOB' => '68',
+            'BOV' => '984',
+            'BRL' => '986',
+            'BSD' => '44',
+            'BTN' => '64',
+            'BWP' => '72',
+            'BYN' => '933',
+            'BZD' => '84',
+            'CAD' => '124',
+            'CDF' => '976',
+            'CHE' => '947',
+            'CHF' => '756',
+            'CHW' => '948',
+            'CLF' => '990',
+            'CLP' => '152',
+            'CNY' => '156',
+            'COP' => '170',
+            'COU' => '970',
+            'CRC' => '188',
+            'CUC' => '931',
+            'CUP' => '192',
+            'CVE' => '132',
+            'CZK' => '203',
+            'DJF' => '262',
+            'DKK' => '208',
+            'DOP' => '214',
+            'DZD' => '12',
+            'EGP' => '818',
+            'ERN' => '232',
+            'ETB' => '230',
+            'EUR' => '978',
+            'FJD' => '242',
+            'FKP' => '238',
+            'GBP' => '826',
+            'GEL' => '981',
+            'GHS' => '936',
+            'GIP' => '292',
+            'GMD' => '270',
+            'GNF' => '324',
+            'GTQ' => '320',
+            'GYD' => '328',
+            'HKD' => '344',
+            'HNL' => '340',
+            'HRK' => '191',
+            'HTG' => '332',
+            'HUF' => '348',
+            'IDR' => '360',
+            'ILS' => '376',
+            'INR' => '356',
+            'IQD' => '368',
+            'IRR' => '364',
+            'ISK' => '352',
+            'JMD' => '388',
+            'JOD' => '400',
+            'JPY' => '392',
+            'KES' => '404',
+            'KGS' => '417',
+            'KHR' => '116',
+            'KMF' => '174',
+            'KPW' => '408',
+            'KRW' => '410',
+            'KWD' => '414',
+            'KYD' => '136',
+            'KZT' => '398',
+            'LAK' => '418',
+            'LBP' => '422',
+            'LKR' => '144',
+            'LRD' => '430',
+            'LSL' => '426',
+            'LYD' => '434',
+            'MAD' => '504',
+            'MDL' => '498',
+            'MGA' => '969',
+            'MKD' => '807',
+            'MMK' => '104',
+            'MNT' => '496',
+            'MOP' => '446',
+            'MRU' => '929',
+            'MUR' => '480',
+            'MVR' => '462',
+            'MWK' => '454',
+            'MXN' => '484',
+            'MXV' => '979',
+            'MYR' => '458',
+            'MZN' => '943',
+            'NAD' => '516',
+            'NGN' => '566',
+            'NIO' => '558',
+            'NOK' => '578',
+            'NPR' => '524',
+            'NZD' => '554',
+            'OMR' => '512',
+            'PAB' => '590',
+            'PEN' => '604',
+            'PGK' => '598',
+            'PHP' => '608',
+            'PKR' => '586',
+            'PLN' => '985',
+            'PYG' => '600',
+            'QAR' => '634',
+            'RON' => '946',
+            'RSD' => '941',
+            'RUB' => '643',
+            'RWF' => '646',
+            'SAR' => '682',
+            'SBD' => '90',
+            'SCR' => '690',
+            'SDG' => '938',
+            'SEK' => '752',
+            'SGD' => '702',
+            'SHP' => '654',
+            'SLL' => '694',
+            'SOS' => '706',
+            'SRD' => '968',
+            'SSP' => '728',
+            'STN' => '930',
+            'SVC' => '222',
+            'SYP' => '760',
+            'SZL' => '748',
+            'THB' => '764',
+            'TJS' => '972',
+            'TMT' => '934',
+            'TND' => '788',
+            'TOP' => '776',
+            'TRY' => '949',
+            'TTD' => '780',
+            'TWD' => '901',
+            'TZS' => '834',
+            'UAH' => '980',
+            'UGX' => '800',
+            'USD' => '840',
+            'USN' => '997',
+            'UYI' => '940',
+            'UYU' => '858',
+            'UYW' => '927',
+            'UZS' => '860',
+            'VES' => '928',
+            'VND' => '704',
+            'VUV' => '548',
+            'WST' => '882',
+            'XAF' => '950',
+            'XAG' => '961',
+            'XAU' => '959',
+            'XBA' => '955',
+            'XBB' => '956',
+            'XBC' => '957',
+            'XBD' => '958',
+            'XCD' => '951',
+            'XDR' => '960',
+            'XOF' => '952',
+            'XPD' => '964',
+            'XPF' => '953',
+            'XPT' => '962',
+            'XSU' => '994',
+            'XTS' => '963',
+            'XUA' => '965',
+            'XXX' => '999',
+            'YER' => '886',
+            'ZAR' => '710',
+            'ZMW' => '967',
+            'ZWL' => '932',
+        );
+        if (array_key_exists($currencyCode, $isoCodes)) {
+            $result = $isoCodes[$currencyCode];
         }
-        else
-        {
-            return true;
-        }
-    }
-
-    public function formatAmount($amount, $minorUnits)
-    {
-        if (parseBoolString($minorUnits))
-        {
-            $amount = $amount / 100;
-        }
-        
-        return (float)($amount);
-    }
-
-    public function currencySymbol($currencyCode)
-    {
-        switch ($currencyCode)
-        {
-            case 'GBP':
-                return '&pound;';
-                break;
-            case 'USD':
-                return '$';
-                break;
-            case 'EUR':
-                return '&euro;';
-                break;
-            default:
-                return htmlentities($currencyCode);
-                break;
-        }
-    }
-
-    public function checkParams($params)
-    {
-        return !((empty($params)) || (!array_key_exists('ps_merchant_reference', $params)) || (!array_key_exists('ps_payment_amount', $params)));
-    }
-
-    public function checkChecksum($secretKey, $amount, $currencyCode, $merchantRef, $paymentsenseRef, $paymentsenseChecksum)
-    {
-        if (empty($secretKey))
-        {
-            return array(true, 'checksum ignored, no secretkey');
-        }
-        else
-        {
-            if (empty($paymentsenseChecksum))
-            {
-                return array(false, 'checksum expected but missing (check secret key)');
-            }
-            else
-            {
-                $checksum = sha1($amount.$currencyCode.$merchantRef.$paymentsenseRef.$secretKey);
-                if ($checksum != $paymentsenseChecksum)
-                {
-                    return array(false, 'checksum mismatch (check secret key)');
-                }
-                else
-                {
-                    return array(true, 'checksum matched');
-                }
-            }
-        }
-    }
-
-    public function getCurrencyISO($currencyISO)
-    {
-        $currencies = array('ARS' => 32, 'AUD' => 36, 'BRL' => 986, 'CAD' => 124, 'CHF' => 756, 'CLP' => 152, 'CNY' => 156,
-        'COP' => 170, 'CZK' => 203, 'DKK' => 208, 'EUR' => 978, 'GBP' => 826, 'HKD' => 344, 'HUF' => 348, 'IDR' => 360,
-        'ISK' => 352, 'JPY' => 392, 'KES' => 404, 'KRW' => 410, 'MXN' => 484, 'MYR' => 458, 'NOK' => 578, 'NZD' => 554,
-        'PHP' => 608, 'PLN' => 985, 'SEK' => 752, 'SGD' => 702, 'THB' => 764, 'TWD' => 901, 'USD' => 840, 'VND' => 704, 'ZAR' => 710);
-
-        if ($currencies[strtoupper($currencyISO)])
-        {
-            return $currencies[strtoupper($currencyISO)];
-        }
-        return 'error - cannot find currency';
+        return $result;
     }
 
     /**
@@ -642,7 +792,7 @@ class Paymentsense extends PaymentModule
      * @param  string $countryCode Country 3166-1 code.
      * @return string
      */
-    public function getCountryIsoNumericCode($countryCode)
+    protected function getCountryIsoNumericCode($countryCode)
     {
         $result   = '';
         $isoCodes = array(
@@ -913,18 +1063,6 @@ class Paymentsense extends PaymentModule
     }
 
     /**
-     * Checks whether the payment method is configured
-     *
-     * @return bool True if gateway merchant ID, password and pre-shared key are non-empty, otherwise false
-     */
-    public function isConfigured()
-    {
-        return ((trim(Configuration::get('PAYMENTSENSE_GATEWAYID')) != '') &&
-            (trim(Configuration::get('PAYMENTSENSE_GATEWAYPASS')) != '') &&
-            (trim(Configuration::get('PAYMENTSENSE_PSK')) != ''));
-    }
-
-    /**
      * Gets the URL where the customer will be redirected when returning from the Hosted Payment Form
      *
      * Used to set the CallbackURL parameter for the Hosted Payment Form request
@@ -979,7 +1117,7 @@ class Paymentsense extends PaymentModule
      * @param string $key Secret key to use for generating the hash.
      * @return string
      */
-    public function calculateHashDigest($data, $hashMethod, $key)
+    protected function calculateHashDigest($data, $hashMethod, $key)
     {
         $result     = '';
         $includeKey = in_array($hashMethod, ['MD5', 'SHA1'], true);
@@ -988,7 +1126,6 @@ class Paymentsense extends PaymentModule
         }
         switch ($hashMethod) {
             case 'MD5':
-                // @codingStandardsIgnoreLine
                 $result = md5($data);
                 break;
             case 'SHA1':
@@ -1005,36 +1142,13 @@ class Paymentsense extends PaymentModule
     }
 
     /**
-     * Checks whether the hash digest received from the payment gateway is valid
-     *
-     * @param string $requestType Type of the request (notification or customer redirect)
-     *
-     * @return bool
-     */
-    public function isHashDigestValid($requestType)
-    {
-        $result = false;
-        $data   = $this->buildPostString($requestType);
-        if ($data) {
-            $hashDigestReceived   = Tools::getValue('HashDigest');
-            $hashDigestCalculated = $this->calculateHashDigest(
-                $data,
-                'SHA1', // Hardcoded as per the current plugin implementation
-                Configuration::get('PAYMENTSENSE_PSK')
-            );
-            $result = strToUpper($hashDigestReceived) === strToUpper($hashDigestCalculated);
-        }
-        return $result;
-    }
-
-    /**
      * Builds a string containing the expected fields from the POST request received from the payment gateway
      *
      * @param string $requestType Type of the request (notification or customer redirect)
      *
      * @return bool
      */
-    public function buildPostString($requestType)
+    protected function buildPostString($requestType)
     {
         $result = false;
         $fields = array(
@@ -1085,97 +1199,5 @@ class Paymentsense extends PaymentModule
             }
         }
         return $result;
-    }
-
-    /**
-     * Gets order state based on transaction status code
-     *
-     * @param string $statusCode Transaction status code
-     * @param string $prevStatusCode Previous transaction status code
-     *
-     * @return string
-     */
-    public function getOrderState($statusCode, $prevStatusCode)
-    {
-        switch ($statusCode) {
-            case self::TRX_RESULT_SUCCESS:
-                $orderState = Configuration::get('PS_OS_WS_PAYMENT');
-                break;
-            case self::TRX_RESULT_DUPLICATE:
-                if ($prevStatusCode === self::TRX_RESULT_SUCCESS) {
-                    $orderState = Configuration::get('PS_OS_WS_PAYMENT');
-                } else {
-                    $orderState = Configuration::get('PS_OS_ERROR');
-                }
-                break;
-            default:
-                $orderState = Configuration::get('PS_OS_ERROR');
-        }
-        return $orderState;
-    }
-
-    /**
-     * Retrieves the Cart ID from the OrderID POST variable received by the payment gateway
-     *
-     * @return int
-     */
-    public function retrieveCartID()
-    {
-        $orderId = Tools::getValue('OrderID');
-        return (int) Tools::substr($orderId, strpos($orderId, '~') + 1);
-    }
-
-    /**
-     * Determines whether the order is paid
-     *
-     * @param OrderCore $order
-     *
-     * @return bool
-     */
-    public function isOrderPaid($order)
-    {
-        $result = false;
-        $paidStatuses = array(
-            Configuration::get('PS_OS_WS_PAYMENT'),
-            Configuration::get('PS_OS_PAYMENT'),
-            Configuration::get('PS_OS_OUTOFSTOCK_PAID')
-        );
-        if (Validate::isLoadedObject($order)) {
-            $result = in_array($order->getCurrentState(), $paidStatuses);
-        }
-        return $result;
-    }
-
-    /**
-     * Updates the order
-     *
-     * @param int $cartId
-     * @return bool
-     *
-     * @throws Exception
-     */
-    public function updateOrder($cartId)
-    {
-        $orderState = $this->getOrderState(
-            Tools::getValue('StatusCode'),
-            Tools::getValue('PreviousStatusCode')
-        );
-        $amountPaid = (float) Tools::getValue('Amount') / 100;
-        $message = (Tools::getValue('StatusCode') === self::TRX_RESULT_DUPLICATE)
-            ? Tools::getValue('PreviousMessage')
-            : Tools::getValue('Message');
-        $cart = new Cart($cartId);
-        $customer = new Customer((int)$cart->id_customer);
-        return $this->validateOrder(
-            $cartId,
-            $orderState,
-            $amountPaid,
-            $this->displayName,
-            $message,
-            array(),
-            null,
-            false,
-            $customer->secure_key
-        );
     }
 }

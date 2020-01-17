@@ -1,6 +1,6 @@
 <?php
 /*
-* Copyright (C) 2018 Paymentsense Ltd.
+* Copyright (C) 2020 Paymentsense Ltd.
 *
 * This program is free software: you can redistribute it and/or modify it under the terms
 * of the AFL Academic Free License as published by the Free Software Foundation, either
@@ -12,7 +12,7 @@
 * AFL Academic Free License along with this program. If not, see <http://opensource.org/licenses/AFL-3.0/>.
 *
 *  @author Paymentsense <devsupport@paymentsense.com>
-*  @copyright  2018 Paymentsense Ltd.
+*  @copyright  2020 Paymentsense Ltd.
 *  @license    http://opensource.org/licenses/afl-3.0.php  Academic Free License (AFL 3.0)
 */
 
@@ -41,7 +41,6 @@ class PaymentsenseNotificationModuleFrontController extends ModuleFrontControlle
     const MSG_HASH_DIGEST_ERROR    = 'Invalid Hash Digest.';
     const MSG_INVALID_CART_ID      = 'Invalid Cart ID %d.';
     const MSG_ORDER_ALREADY_EXISTS = 'An order for Cart ID %d already exists.';
-    const MSG_ORDER_UPDATE_ERROR   = 'An error occurred during order update. Please contact support.';
     const MSG_EXCEPTION            = 'An exception with message "%s" has been thrown. Please contact support.';
 
     /** @var Paymentsense */
@@ -87,10 +86,6 @@ class PaymentsenseNotificationModuleFrontController extends ModuleFrontControlle
             }
             if ($cart->orderExists()) {
                 $this->setError(sprintf(self::MSG_ORDER_ALREADY_EXISTS, $cart->id));
-                return;
-            }
-            if (!$this->module->updateOrder($cart->id)) {
-                $this->setError(self::MSG_ORDER_UPDATE_ERROR);
                 return;
             }
             $this->setSuccess();

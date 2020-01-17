@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<module>
+    <name>paymentsense</name>
+    <displayName><![CDATA[Paymentsense]]></displayName>
+    <version><![CDATA[2.1.2]]></version>
+    <description><![CDATA[Process transactions through the Paymentsense gateway.]]></description>
+    <author><![CDATA[Paymentsense]]></author>
+    <tab><![CDATA[payments_gateways]]></tab>
+	<confirmUninstall><![CDATA[Are you sure you want to uninstall?]]></confirmUninstall>
+    <is_configurable>1</is_configurable>
+    <need_instance>1</need_instance>
+	<limited_countries></limited_countries>
+</module>
