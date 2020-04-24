@@ -35,6 +35,9 @@ V2.1.0 - File Modified: 22/06/2018 - By Alexander Kaltchev - Dev Advisory UK - A
 V2.1.1 - File Modified: 26/07/2019 - By Alexander Kaltchev - Dev Advisory UK - Updated the conversion of the numeric country ISO 3166-1 codes
 V2.1.2 - File Modified: 17/01/2020 - By Alexander Kaltchev - Dev Advisory UK - Added module information reporting feature
                                                                              - Changed module configuration settings page
+V2.1.3 - File Modified: 17/01/2020 - By Alexander Kaltchev - Dev Advisory UK - MD5, HMACMD5, HMACSHA1, HMACSHA256 and HMACSHA512 hash methods (Paymentsense Hosted)
+                                                                             - Filter for characters not supported by the gateway
+                                                                             - Length restriction of fields sent to the gateway
 
 A complete list of changes can be found in the changelog file (changelog.txt).
 */
@@ -53,7 +56,7 @@ class Paymentsense extends PaymentModule
     /**
      * Module version
      */
-    const MODULE_VERSION = '2.1.2';
+    const MODULE_VERSION = '2.1.3';
 
     /**
      * Transaction Result Codes
@@ -102,6 +105,7 @@ class Paymentsense extends PaymentModule
         return (parent::install() && Configuration::updateValue('PAYMENTSENSE_GATEWAYID', '')
                                   && Configuration::updateValue('PAYMENTSENSE_GATEWAYPASS', '')
                                   && Configuration::updateValue('PAYMENTSENSE_PSK', '')
+                                  && Configuration::updateValue('PAYMENTSENSE_HASHMETHOD', '')
                                   && Configuration::updateValue('PAYMENTSENSE_DEBUG', '')
                                   && Configuration::updateValue('PAYMENTSENSE_TRANSACTION_TYPE', '')
                                   && $this->registerHook('payment')
@@ -119,6 +123,7 @@ class Paymentsense extends PaymentModule
         return (Configuration::deleteByName('PAYMENTSENSE_GATEWAYID')
             && Configuration::deleteByName('PAYMENTSENSE_GATEWAYPASS')
             && Configuration::deleteByName('PAYMENTSENSE_PSK')
+            && Configuration::deleteByName('PAYMENTSENSE_HASHMETHOD')
             && Configuration::deleteByName('PAYMENTSENSE_DEBUG')
             && Configuration::deleteByName('PAYMENTSENSE_TRANSACTION_TYPE')
             && parent::uninstall());
@@ -256,11 +261,7 @@ class Paymentsense extends PaymentModule
         $data   = $this->buildPostString($requestType);
         if ($data) {
             $hashDigestReceived   = Tools::getValue('HashDigest');
-            $hashDigestCalculated = $this->calculateHashDigest(
-                $data,
-                'SHA1', // Hardcoded as per the current plugin implementation
-                Configuration::get('PAYMENTSENSE_PSK')
-            );
+            $hashDigestCalculated = $this->calculateHashDigest($data);
             $result = strToUpper($hashDigestReceived) === strToUpper($hashDigestCalculated);
         }
         return $result;
@@ -324,8 +325,10 @@ class Paymentsense extends PaymentModule
             'form_var_gateway_id'   => $this->getSetting('PAYMENTSENSE_GATEWAYID'),
             'form_var_gateway_pass' => $this->getSetting('PAYMENTSENSE_GATEWAYPASS'),
             'form_var_gateway_psk'  => $this->getSetting('PAYMENTSENSE_PSK'),
+            'form_var_hash_method'  => $this->getSetting('PAYMENTSENSE_HASHMETHOD'),
             'form_var_trx_type'     => $this->getSetting('PAYMENTSENSE_TRANSACTION_TYPE'),
-            'form_var_debug'        => $this->getSetting('PAYMENTSENSE_DEBUG')
+            'form_var_debug'        => $this->getSetting('PAYMENTSENSE_DEBUG'),
+            'hash_method_available' => $this->isPrestaShopVersion17()
         );
         if (Tools::isSubmit('btnSubmit')) {
             if ($this->updateConfigSettings()) {
@@ -431,6 +434,7 @@ class Paymentsense extends PaymentModule
             'PAYMENTSENSE_GATEWAYID',
             'PAYMENTSENSE_GATEWAYPASS',
             'PAYMENTSENSE_PSK',
+            'PAYMENTSENSE_HASHMETHOD',
             'PAYMENTSENSE_TRANSACTION_TYPE',
             'PAYMENTSENSE_DEBUG'
         );
@@ -475,103 +479,75 @@ class Paymentsense extends PaymentModule
 
         $paymentsense_merchantid      = Configuration::get('PAYMENTSENSE_GATEWAYID');
         $paymentsense_gatewaypass     = Configuration::get('PAYMENTSENSE_GATEWAYPASS');
-        $paymentsense_psk             = Configuration::get('PAYMENTSENSE_PSK');
         $paymentsense_transactiontype = Configuration::get('PAYMENTSENSE_TRANSACTION_TYPE');
 
-        $datestamp = date('Y-m-d H:i:s P');
         $gatewayorderID = date('Ymd-His').'~'.$params['cart']->id;
 
-        if ($address->phone != '') {
-            $PhoneNumber = $address->phone;
-        } else {
-            $PhoneNumber = $address->phone_mobile;
+        $fields = array(
+            'Amount' => $amount,
+            'CurrencyCode' => $this->getCurrencyIsoCode($cart_currency),
+            'EchoAVSCheckResult' => 'true',
+            'EchoCV2CheckResult' => 'true',
+            'EchoThreeDSecureAuthenticationCheckResult' => 'true',
+            'EchoCardType' => 'true',
+            'OrderID' => $gatewayorderID,
+            'TransactionType' => $paymentsense_transactiontype,
+            'TransactionDateTime' => date('Y-m-d H:i:s P'),
+            'CallbackURL' => $this->getCustomerRedirectUrl(),
+            'OrderDescription' => $gatewayorderID,
+            'CustomerName' => $customer->firstname.' '.$customer->lastname,
+            'Address1' => $address->address1,
+            'Address2' => $address->address2,
+            'Address3' => '',
+            'Address4' => '',
+            'City' => $address->city,
+            'State' => '',
+            'PostCode' => $address->postcode,
+            'CountryCode' => $this->getCountryIsoNumericCode($this->context->country->iso_code),
+            'EmailAddress' => $customer->email,
+            'PhoneNumber' => ($address->phone != '') ? $address->phone : $address->phone_mobile,
+            'EmailAddressEditable' => 'false',
+            'PhoneNumberEditable' => 'false',
+            'CV2Mandatory' => 'true',
+            'Address1Mandatory' => 'true',
+            'CityMandatory' => 'true',
+            'PostCodeMandatory' => 'true',
+            'StateMandatory' => 'false',
+            'CountryMandatory' => 'true',
+            'ResultDeliveryMethod' => 'SERVER',
+            'ServerResultURL' => $this->getNotificationUrl(),
+            'PaymentFormDisplaysResult' => 'false',
+            'ServerResultURLCookieVariables' => '',
+            'ServerResultURLFormVariables' => 'orderTotal=' . $orderTotal,
+            'ServerResultURLQueryStringVariables' => '',
+        );
+
+        $fields = array_map(
+            function ($value) {
+                return $value === null ? '' : $this->filterUnsupportedChars($value);
+            },
+            $fields
+        );
+
+        $fields = $this->applyLengthRestrictions($fields);
+
+        $data  = 'MerchantID=' . $paymentsense_merchantid;
+        $data .= '&Password=' . $paymentsense_gatewaypass;
+
+        foreach ($fields as $key => $value) {
+            $data .= '&' . $key . '=' . $value;
         }
 
-        $HashString = 'PreSharedKey='.$paymentsense_psk;
-        $HashString .= '&MerchantID='.$paymentsense_merchantid;
-        $HashString .= '&Password='.$paymentsense_gatewaypass;
-        $HashString .= '&Amount='.$amount;
-        $HashString .= '&CurrencyCode='.$this->getCurrencyIsoCode($cart_currency);
-        $HashString .= '&EchoAVSCheckResult=True';
-        $HashString .= '&EchoCV2CheckResult=True';
-        $HashString .= '&EchoThreeDSecureAuthenticationCheckResult=True';
-        $HashString .= '&EchoCardType=True';
-        $HashString .= '&OrderID='.$gatewayorderID;
-        $HashString .= '&TransactionType='.$paymentsense_transactiontype;
-        $HashString .= '&TransactionDateTime='.$datestamp;
-        $HashString .= '&CallbackURL='.$this->getCustomerRedirectUrl();
-        $HashString .= '&OrderDescription='.$gatewayorderID;
-        $HashString .= '&CustomerName='.$customer->firstname.' '.$customer->lastname;
-        $HashString .= '&Address1='.$address->address1;
-        $HashString .= '&Address2='.$address->address2;
-        $HashString .= '&Address3=';
-        $HashString .= '&Address4=';
-        $HashString .= '&City='.$address->city;
-        $HashString .= '&State=';
-        $HashString .= '&PostCode='.$address->postcode;
-        $HashString .= '&CountryCode='.$this->getCountryIsoNumericCode($this->context->country->iso_code);
-        $HashString .= '&EmailAddress='.$customer->email;
-        $HashString .= '&PhoneNumber='.$PhoneNumber;
-        $HashString .= '&EmailAddressEditable=False';
-        $HashString .= '&PhoneNumberEditable=False';
-        $HashString .= '&CV2Mandatory=True';
-        $HashString .= '&Address1Mandatory=True';
-        $HashString .= '&CityMandatory=True';
-        $HashString .= '&PostCodeMandatory=True';
-        $HashString .= '&StateMandatory=False';
-        $HashString .= '&CountryMandatory=True';
-        $HashString .= '&ResultDeliveryMethod=SERVER';
-        $HashString .= '&ServerResultURL=' . $this->getNotificationUrl();
-        $HashString .= '&PaymentFormDisplaysResult=False';
-        $HashString .= '&ServerResultURLCookieVariables='.'';
-        $HashString .= '&ServerResultURLFormVariables=orderTotal='.$orderTotal;
-        $HashString .= '&ServerResultURLQueryStringVariables=';
-        $HashDigest = sha1($HashString);
+        $additionalFields = array(
+            'HashDigest' => $this->calculateHashDigest($data),
+            'MerchantID' => $paymentsense_merchantid,
+        );
 
-        $parameters = array();
-        $parameters['HashDigest'] = $HashDigest;
-        $parameters['MerchantID'] = $paymentsense_merchantid;
-        $parameters['Amount'] = $amount;
-        $parameters['CurrencyCode'] = $this->getCurrencyIsoCode($cart_currency);
-        $parameters['EchoAVSCheckResult'] = 'True';
-        $parameters['EchoCV2CheckResult'] = 'True';
-        $parameters['EchoThreeDSecureAuthenticationCheckResult'] = 'True';
-        $parameters['EchoCardType'] = 'True';
-        $parameters['OrderID'] = $gatewayorderID;
-        $parameters['TransactionType'] = $paymentsense_transactiontype;
-        $parameters['TransactionDateTime'] = $datestamp;
-        $parameters['CallbackURL'] = $this->getCustomerRedirectUrl();
-        $parameters['OrderDescription'] = $gatewayorderID;
-        $parameters['CustomerName'] = $customer->firstname.' '.$customer->lastname;
-        $parameters['Address1'] = $address->address1;
-        $parameters['Address2'] = $address->address2;
-        $parameters['Address3'] = '';
-        $parameters['Address4'] = '';
-        $parameters['City'] = $address->city;
-        $parameters['State'] = '';
-        $parameters['PostCode'] = $address->postcode;
-        $parameters['CountryCode'] = $this->getCountryIsoNumericCode($this->context->country->iso_code);
-        $parameters['EmailAddress'] = $customer->email;
-        $parameters['PhoneNumber'] = $PhoneNumber;
-        $parameters['EmailAddressEditable'] = 'False';
-        $parameters['PhoneNumberEditable'] = 'False';
-        $parameters['CV2Mandatory'] = 'True';
-        $parameters['Address1Mandatory'] = 'True';
-        $parameters['CityMandatory'] = 'True';
-        $parameters['PostCodeMandatory'] = 'True';
-        $parameters['StateMandatory'] = 'False';
-        $parameters['CountryMandatory'] = 'True';
-        $parameters['ResultDeliveryMethod'] = 'SERVER';
-        $parameters['ServerResultURL'] = $this->getNotificationUrl();
-        $parameters['PaymentFormDisplaysResult'] = 'False';
-        $parameters['ServerResultURLCookieVariables'] = '';
-        $parameters['ServerResultURLFormVariables'] = 'orderTotal='.$orderTotal;
-        $parameters['ServerResultURLQueryStringVariables'] = '';
-        $parameters['ThreeDSecureCompatMode'] = 'false';
-        $parameters['ServerResultCompatMode'] = 'false';
+        $fields = array_merge($additionalFields, $fields);
+
         $form_target = 'https://mms.paymentsensegateway.com/Pages/PublicPages/PaymentForm.aspx';
 
-        return array('parameters' => $parameters, 'form_target' => $form_target);
+        return array('parameters' => $fields, 'form_target' => $form_target);
     }
 
     /**
@@ -1110,17 +1086,18 @@ class Paymentsense extends PaymentModule
 
     /**
      * Calculates the hash digest.
-     * Supported hash methods: MD5, SHA1, HMACMD5, HMACSHA1
+     * Supported hash methods: MD5, SHA1, HMACMD5, HMACSHA1, HMACSHA256 and HMACSHA512
      *
      * @param string $data Data to be hashed.
-     * @param string $hashMethod Hash method.
-     * @param string $key Secret key to use for generating the hash.
      * @return string
      */
-    protected function calculateHashDigest($data, $hashMethod, $key)
+    protected function calculateHashDigest($data)
     {
-        $result     = '';
-        $includeKey = in_array($hashMethod, ['MD5', 'SHA1'], true);
+        $result = '';
+        $key = Configuration::get('PAYMENTSENSE_PSK');
+        $hashMethod = Configuration::get('PAYMENTSENSE_HASHMETHOD');
+        $hashMethod = !empty($hashMethod) ? $hashMethod : 'SHA1';
+        $includeKey = in_array($hashMethod, array('MD5', 'SHA1'), true);
         if ($includeKey) {
             $data = 'PreSharedKey=' . $key . '&' . $data;
         }
@@ -1136,6 +1113,12 @@ class Paymentsense extends PaymentModule
                 break;
             case 'HMACSHA1':
                 $result = hash_hmac('sha1', $data, $key);
+                break;
+            case 'HMACSHA256':
+                $result = hash_hmac('sha256', $data, $key);
+                break;
+            case 'HMACSHA512':
+                $result = hash_hmac('sha512', $data, $key);
                 break;
         }
         return $result;
@@ -1197,6 +1180,85 @@ class Paymentsense extends PaymentModule
             foreach ($fields[$requestType] as $field) {
                 $result .= '&' . $field . '=' . Tools::getValue($field);
             }
+        }
+        return $result;
+    }
+
+    /**
+     * Converts HTML entities to their corresponding characters and replaces the chars that are not supported
+     * by the gateway with supported ones
+     *
+     * @param string $data A value of a variable sent to the Hosted Payment Form.
+     * @param bool   $replace_ampersand Flag for replacing the "ampersand" (&) character.
+     * @return string
+     */
+    protected function filterUnsupportedChars($data, $replace_ampersand = false)
+    {
+        $data = $this->htmlDecode($data);
+        if ($replace_ampersand) {
+            $data = $this->replaceAmpersand($data);
+        }
+        $data = $this->htmlDecode($data);
+        return str_replace(
+            array('"', '\'', '\\', '<', '>', '[', ']'),
+            array('`', '`',  '/',  '(', ')', '(', ')'),
+            $data
+        );
+    }
+
+    /**
+     * Converts HTML entities to their corresponding characters
+     *
+     * @param string $data A value of a variable sent to the Hosted Payment Form.
+     * @return string
+     */
+    protected function htmlDecode($data)
+    {
+        return str_replace(
+            array('&quot;', '&apos;', '&#039;', '&amp;'),
+            array('"',      '\'',    '\'',      '&'),
+            $data
+        );
+    }
+
+    /**
+     * Replaces the "ampersand" (&) character with the "at" character (@).
+     * Required for Paymentsense Direct.
+     *
+     * @param string $data A value of a variable sent to the Hosted Payment Form.
+     * @return string
+     */
+    protected function replaceAmpersand($data)
+    {
+        return str_replace('&', '@', $data);
+    }
+
+    /**
+     * Applies the gateway's restrictions on the length of selected alphanumeric fields sent to the HPF
+     *
+     * @param array $data The variables sent to the Hosted Payment Form.
+     * @return array
+     */
+    protected function applyLengthRestrictions($data)
+    {
+        $result = array();
+        $max_lengths = array(
+            'OrderDescription' => 256,
+            'CustomerName'     => 100,
+            'Address1'         => 100,
+            'Address2'         => 50,
+            'Address3'         => 50,
+            'Address4'         => 50,
+            'City'             => 50,
+            'State'            => 50,
+            'PostCode'         => 50,
+            'EmailAddress'     => 100,
+            'PhoneNumber'      => 30
+        );
+        foreach ($data as $key => $value) {
+            $result[$key] = array_key_exists($key, $max_lengths)
+                ? substr($value, 0, $max_lengths[$key])
+                : $value;
         }
         return $result;
     }

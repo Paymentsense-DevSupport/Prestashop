@@ -73,6 +73,26 @@
                     </p>
                 </div>
             </div>
+            {if $hash_method_available}
+            <div class="form-group">
+                <label for="PAYMENTSENSE_HASHMETHOD" class="control-label col-lg-3 required">
+                    {l s="Hash Method: " mod='paymentsense'}
+                </label>
+                <div class="col-lg-9">
+                    <select name="PAYMENTSENSE_HASHMETHOD" id="PAYMENTSENSE_HASHMETHOD">
+                        <option value="SHA1"{if $form_var_hash_method == "SHA1"} selected="selected"{/if}>{l s="SHA1" mod='paymentsense'}</option>
+                        <option value="MD5"{if $form_var_hash_method == "MD5"} selected="selected"{/if}>{l s="MD5" mod='paymentsense'}</option>
+                        <option value="HMACSHA1"{if $form_var_hash_method == "HMACSHA1"} selected="selected"{/if}>{l s="HMACSHA1" mod='paymentsense'}</option>
+                        <option value="HMACMD5"{if $form_var_hash_method == "HMACMD5"} selected="selected"{/if}>{l s="HMACMD5" mod='paymentsense'}</option>
+                        <option value="HMACSHA256"{if $form_var_hash_method == "HMACSHA256"} selected="selected"{/if}>{l s="HMACSHA256" mod='paymentsense'}</option>
+                        <option value="HMACSHA512"{if $form_var_hash_method == "HMACSHA512"} selected="selected"{/if}>{l s="HMACSHA512" mod='paymentsense'}</option>
+                    </select>
+                    <p class="help-block">
+                        Found in the Merchant Management System under "Account Admin" > "Account Settings".
+                    </p>
+                </div>
+            </div>
+            {/if}
             <div class="form-group">
                 <label for="PAYMENTSENSE_TRANSACTION_TYPE" class="control-label col-lg-3 required">
                     {l s="Transaction Type: " mod='paymentsense'}
